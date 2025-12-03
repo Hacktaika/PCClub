@@ -1,6 +1,7 @@
-import { memo, useState } from 'react'
+import { memo, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import useStore from '../store/useStore'
+import Modal from '../components/Modal'
 
 const Social = memo(() => {
   const { onlineUsers, user, chatRequests, sendChatRequest, findBlindDatePair, toggleDeadHourNotifications, notifications } = useStore()
@@ -11,19 +12,21 @@ const Social = memo(() => {
   const [showPairModal, setShowPairModal] = useState(false)
   const [foundPair, setFoundPair] = useState(null)
 
-  const games = ['all', 'CS2', 'Valorant', 'Dota 2']
-  const filteredUsers = onlineUsers.filter(user =>
-    filter === 'all' || user.game === filter
+  const games = useMemo(() => ['all', 'CS2', 'Valorant', 'Dota 2'], [])
+  const filteredUsers = useMemo(() => 
+    onlineUsers.filter(user =>
+      filter === 'all' || user.game === filter
+    ), [onlineUsers, filter]
   )
 
   // Проверяем, был ли уже отправлен запрос пользователю
-  const hasSentRequest = (userId) => {
+  const hasSentRequest = useCallback((userId) => {
     return chatRequests.some(
       req => req.fromUserId === user.id && req.toUserId === userId
     )
-  }
+  }, [chatRequests, user.id])
 
-  const handleSendMessage = async (userId) => {
+  const handleSendMessage = useCallback(async (userId) => {
     // Проверяем, не был ли уже отправлен запрос
     if (hasSentRequest(userId)) {
       setMessage({
@@ -47,9 +50,9 @@ const Social = memo(() => {
         setSendingUserId(null)
       }, 3000)
     }, 500)
-  }
+  }, [hasSentRequest, sendChatRequest])
 
-  const handleFindPair = async () => {
+  const handleFindPair = useCallback(async () => {
     setIsLoading(true)
     // Симуляция поиска пары
     setTimeout(() => {
@@ -64,13 +67,18 @@ const Social = memo(() => {
       setIsLoading(false)
       setTimeout(() => setMessage(null), 4000)
     }, 1000)
-  }
+  }, [findBlindDatePair])
 
-  const handleToggleNotifications = () => {
+  const handleToggleNotifications = useCallback(() => {
     const result = toggleDeadHourNotifications()
     setMessage(result)
     setTimeout(() => setMessage(null), 3000)
-  }
+  }, [toggleDeadHourNotifications])
+
+  const handleClosePairModal = useCallback(() => {
+    setShowPairModal(false)
+    setFoundPair(null)
+  }, [])
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -238,113 +246,93 @@ const Social = memo(() => {
       </div>
 
       {/* Blind Date Pair Modal */}
-      <AnimatePresence>
-        {showPairModal && foundPair && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
-            onClick={() => setShowPairModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-3xl p-6 max-w-sm w-full"
-            >
-              <div className="text-center mb-6">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  className="text-6xl mb-4"
-                >
-                  💑
-                </motion.div>
-                <h2 className="text-2xl font-bold text-white mb-2">Найдена пара!</h2>
-                <p className="text-gray-400 text-sm">Идеальный партнёр для игры</p>
-              </div>
+      <Modal
+        isOpen={showPairModal && !!foundPair}
+        onClose={handleClosePairModal}
+        zIndex={100}
+      >
+        {foundPair && (
+          <>
+            <div className="text-center mb-6">
+              <div className="text-6xl mb-4">💑</div>
+              <h2 className="text-2xl font-bold text-white mb-2">Найдена пара!</h2>
+              <p className="text-gray-400 text-sm">Идеальный партнёр для игры</p>
+            </div>
 
-              {/* Found Pair Info */}
-              <div className="glass-card rounded-2xl p-5 mb-4 bg-gradient-to-r from-pink-500/20 to-purple-500/20">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-4xl">
-                    {foundPair.avatar}
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-xl font-bold text-white mb-1">{foundPair.name}</div>
-                    <div className="flex items-center gap-2 text-sm text-gray-300">
-                      <span>🎮 {foundPair.game}</span>
-                      <span>•</span>
-                      <span className="text-emerald-400">⭐ {foundPair.rating}</span>
-                    </div>
-                  </div>
+            {/* Found Pair Info */}
+            <div className="glass-card rounded-2xl p-5 mb-4 bg-gradient-to-r from-pink-500/20 to-purple-500/20">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-4xl">
+                  {foundPair.avatar}
                 </div>
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between text-gray-300">
-                    <span>Совпадение по играм:</span>
-                    <span className="text-emerald-400 font-semibold">✓ Да</span>
-                  </div>
-                  <div className="flex items-center justify-between text-gray-300">
-                    <span>Разница в рейтинге:</span>
-                    <span className="text-emerald-400 font-semibold">
-                      {Math.abs(foundPair.rating - user.rating)}
-                    </span>
+                <div className="flex-1">
+                  <div className="text-xl font-bold text-white mb-1">{foundPair.name}</div>
+                  <div className="flex items-center gap-2 text-sm text-gray-300">
+                    <span>🎮 {foundPair.game}</span>
+                    <span>•</span>
+                    <span className="text-emerald-400">⭐ {foundPair.rating}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Discount Info */}
-              <div className="glass-card rounded-xl p-4 mb-4 bg-emerald-500/10 border border-emerald-500/30">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-gray-400 mb-1">Ваша скидка</div>
-                    <div className="text-2xl font-bold text-emerald-400">-50%</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-400 mb-1">Длительность</div>
-                    <div className="text-lg font-bold text-white">3 часа</div>
-                  </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between text-gray-300">
+                  <span>Совпадение по играм:</span>
+                  <span className="text-emerald-400 font-semibold">✓ Да</span>
+                </div>
+                <div className="flex items-center justify-between text-gray-300">
+                  <span>Разница в рейтинге:</span>
+                  <span className="text-emerald-400 font-semibold">
+                    {Math.abs(foundPair.rating - user.rating)}
+                  </span>
                 </div>
               </div>
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setShowPairModal(false)
-                    setFoundPair(null)
-                  }}
-                  className="flex-1 glass-card py-3 rounded-xl text-white font-medium text-sm"
-                >
-                  Закрыть
-                </button>
-                <motion.button
-                  onClick={() => {
-                    if (foundPair && !hasSentRequest(foundPair.id)) {
-                      handleSendMessage(foundPair.id)
-                    }
-                    setShowPairModal(false)
-                    setFoundPair(null)
-                  }}
-                  disabled={foundPair && hasSentRequest(foundPair.id)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
-                    foundPair && hasSentRequest(foundPair.id)
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                  }`}
-                >
-                  {foundPair && hasSentRequest(foundPair.id) ? 'Запрос отправлен' : 'Отправить запрос'}
-                </motion.button>
+            {/* Discount Info */}
+            <div className="glass-card rounded-xl p-4 mb-4 bg-emerald-500/10 border border-emerald-500/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-400 mb-1">Ваша скидка</div>
+                  <div className="text-2xl font-bold text-emerald-400">-50%</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-400 mb-1">Длительность</div>
+                  <div className="text-lg font-bold text-white">3 часа</div>
+                </div>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleClosePairModal}
+                className="flex-1 glass-card py-3 rounded-xl text-white font-medium text-sm"
+              >
+                Закрыть
+              </button>
+              <motion.button
+                onClick={() => {
+                  if (foundPair && !hasSentRequest(foundPair.id)) {
+                    handleSendMessage(foundPair.id)
+                  }
+                  handleClosePairModal()
+                }}
+                disabled={foundPair && hasSentRequest(foundPair.id)}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all ${
+                  foundPair && hasSentRequest(foundPair.id)
+                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                    : 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                }`}
+              >
+                {foundPair && hasSentRequest(foundPair.id) ? 'Запрос отправлен' : 'Отправить запрос'}
+              </motion.button>
+            </div>
+          </>
         )}
-      </AnimatePresence>
+      </Modal>
     </div>
   )
 })
@@ -352,3 +340,4 @@ const Social = memo(() => {
 Social.displayName = 'Social'
 
 export default Social
+

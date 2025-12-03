@@ -1,6 +1,7 @@
-import { memo, useState } from 'react'
+import { memo, useState, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import useStore from '../store/useStore'
+import Modal from '../components/Modal'
 
 const Shop = memo(() => {
   const { shopItems, user, addToCart, cart, removeFromCart, clearCart, purchaseCart } = useStore()
@@ -9,8 +10,8 @@ const Shop = memo(() => {
   const [purchaseMessage, setPurchaseMessage] = useState(null)
   const [addedItemId, setAddedItemId] = useState(null)
 
-  const categories = ['all', 'drinks', 'snacks', 'food', 'merch', 'gaming', 'devices']
-  const categoryLabels = {
+  const categories = useMemo(() => ['all', 'drinks', 'snacks', 'food', 'merch', 'gaming', 'devices'], [])
+  const categoryLabels = useMemo(() => ({
     all: 'Все',
     drinks: 'Напитки',
     snacks: 'Закуски',
@@ -18,21 +19,25 @@ const Shop = memo(() => {
     merch: 'Мерч',
     gaming: 'Игры',
     devices: 'Девайсы',
-  }
+  }), [])
 
-  const filteredItems = shopItems.filter(item =>
-    selectedCategory === 'all' || item.category === selectedCategory
+  const filteredItems = useMemo(() => 
+    shopItems.filter(item =>
+      selectedCategory === 'all' || item.category === selectedCategory
+    ), [shopItems, selectedCategory]
   )
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.price, 0)
+  const cartTotal = useMemo(() => 
+    cart.reduce((sum, item) => sum + item.price, 0), [cart]
+  )
 
-  const handleAddToCart = (item) => {
+  const handleAddToCart = useCallback((item) => {
     addToCart(item)
     setAddedItemId(item.id)
     setTimeout(() => setAddedItemId(null), 2000)
-  }
+  }, [addToCart])
 
-  const handlePurchase = () => {
+  const handlePurchase = useCallback(() => {
     const result = purchaseCart()
     if (result.success) {
       setPurchaseMessage({ type: 'success', text: result.message })
@@ -44,7 +49,12 @@ const Shop = memo(() => {
       setPurchaseMessage({ type: 'error', text: result.message })
       setTimeout(() => setPurchaseMessage(null), 3000)
     }
-  }
+  }, [purchaseCart])
+
+  const handleCloseCart = useCallback(() => {
+    setShowCart(false)
+    setPurchaseMessage(null)
+  }, [])
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -151,128 +161,109 @@ const Shop = memo(() => {
       </div>
 
       {/* Cart Modal - Поверх навигации */}
-      <AnimatePresence>
-        {showCart && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-end"
-            onClick={() => {
-              setShowCart(false)
-              setPurchaseMessage(null)
-            }}
+      <Modal
+        isOpen={showCart}
+        onClose={handleCloseCart}
+        zIndex={100}
+        className="!max-w-full !rounded-t-3xl !rounded-b-none !p-6 pb-24 max-h-[85vh] overflow-y-auto !items-end"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white">Корзина</h2>
+          <button
+            onClick={handleCloseCart}
+            className="text-2xl text-gray-400 hover:text-white"
           >
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-t-3xl p-6 w-full max-h-[85vh] overflow-y-auto pb-24"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">Корзина</h2>
-                <button
-                  onClick={() => {
-                    setShowCart(false)
-                    setPurchaseMessage(null)
-                  }}
-                  className="text-2xl text-gray-400 hover:text-white"
-                >
-                  ✕
-                </button>
-              </div>
+            ✕
+          </button>
+        </div>
 
-              {purchaseMessage && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`mb-4 p-3 rounded-xl ${
-                    purchaseMessage.type === 'success'
-                      ? 'bg-emerald-500/20 border border-emerald-500/30'
-                      : 'bg-red-500/20 border border-red-500/30'
-                  }`}
-                >
-                  <div className={`text-sm font-medium ${
-                    purchaseMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'
-                  }`}>
-                    {purchaseMessage.text}
-                  </div>
-                </motion.div>
-              )}
-
-              {cart.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <div className="text-4xl mb-2">🛒</div>
-                  <p>Корзина пуста</p>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2 mb-4">
-                    {cart.map((item) => (
-                      <motion.div
-                        key={item.cartId}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="glass-card rounded-xl p-3 flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{item.image}</span>
-                          <div>
-                            <div className="font-semibold text-white">{item.name}</div>
-                            <div className="text-sm text-emerald-400">{item.price}₽</div>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => removeFromCart(item.cartId)}
-                          className="text-red-400 text-xl hover:text-red-300 transition-colors"
-                        >
-                          ✕
-                        </button>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  <div className="border-t border-white/10 pt-4 mb-4">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-gray-400">Итого:</span>
-                      <span className="text-emerald-400 font-bold text-xl">{cartTotal}₽</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Баланс:</span>
-                      <span className={user.balance >= cartTotal ? 'text-emerald-400' : 'text-red-400'}>
-                        {user.balance}₽
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 sticky bottom-0 bg-transparent pt-2">
-                    <button
-                      onClick={clearCart}
-                      className="flex-1 glass-card py-3 rounded-xl text-white font-medium"
-                    >
-                      Очистить
-                    </button>
-                    <motion.button
-                      onClick={handlePurchase}
-                      disabled={user.balance < cartTotal || cart.length === 0}
-                      whileHover={{ scale: user.balance >= cartTotal && cart.length > 0 ? 1.02 : 1 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`flex-1 py-3 rounded-xl font-bold transition-all ${
-                        user.balance >= cartTotal && cart.length > 0
-                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                          : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      }`}
-                    >
-                      Купить
-                    </motion.button>
-                  </div>
-                </>
-              )}
-            </motion.div>
+        {purchaseMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mb-4 p-3 rounded-xl ${
+              purchaseMessage.type === 'success'
+                ? 'bg-emerald-500/20 border border-emerald-500/30'
+                : 'bg-red-500/20 border border-red-500/30'
+            }`}
+          >
+            <div className={`text-sm font-medium ${
+              purchaseMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'
+            }`}>
+              {purchaseMessage.text}
+            </div>
           </motion.div>
         )}
-      </AnimatePresence>
+
+        {cart.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            <div className="text-4xl mb-2">🛒</div>
+            <p>Корзина пуста</p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2 mb-4">
+              {cart.map((item) => (
+                <motion.div
+                  key={item.cartId}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="glass-card rounded-xl p-3 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{item.image}</span>
+                    <div>
+                      <div className="font-semibold text-white">{item.name}</div>
+                      <div className="text-sm text-emerald-400">{item.price}₽</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeFromCart(item.cartId)}
+                    className="text-red-400 text-xl hover:text-red-300 transition-colors"
+                  >
+                    ✕
+                  </button>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="border-t border-white/10 pt-4 mb-4">
+              <div className="flex justify-between mb-2">
+                <span className="text-gray-400">Итого:</span>
+                <span className="text-emerald-400 font-bold text-xl">{cartTotal}₽</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Баланс:</span>
+                <span className={user.balance >= cartTotal ? 'text-emerald-400' : 'text-red-400'}>
+                  {user.balance}₽
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 sticky bottom-0 bg-transparent pt-2">
+              <button
+                onClick={clearCart}
+                className="flex-1 glass-card py-3 rounded-xl text-white font-medium"
+              >
+                Очистить
+              </button>
+              <motion.button
+                onClick={handlePurchase}
+                disabled={user.balance < cartTotal || cart.length === 0}
+                whileHover={{ scale: user.balance >= cartTotal && cart.length > 0 ? 1.02 : 1 }}
+                whileTap={{ scale: 0.98 }}
+                className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+                  user.balance >= cartTotal && cart.length > 0
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Купить
+              </motion.button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   )
 })

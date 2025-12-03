@@ -1,7 +1,8 @@
-import { memo, useState, useMemo, useEffect } from 'react'
+import { memo, useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useStore from '../store/useStore'
+import Modal from '../components/Modal'
 
 const HallMap = memo(() => {
   const navigate = useNavigate()
@@ -21,12 +22,16 @@ const HallMap = memo(() => {
   const [selectedPC, setSelectedPC] = useState(null)
   const [filter, setFilter] = useState('all')
 
-  const safePCs = Array.isArray(pcs) ? pcs : []
-  const filteredPCs = safePCs.filter(pc => {
+  const safePCs = useMemo(() => Array.isArray(pcs) ? pcs : [], [pcs])
+  const filteredPCs = useMemo(() => safePCs.filter(pc => {
     if (!pc) return false
     if (filter === 'all') return true
     return pc.status === filter
-  })
+  }), [safePCs, filter])
+
+  const handleCloseModal = useCallback(() => {
+    setSelectedPC(null)
+  }, [])
 
   // Категории рядов
   const rowCategories = {
@@ -251,78 +256,68 @@ const HallMap = memo(() => {
       </div>
 
       {/* PC Details Modal */}
-      <AnimatePresence>
+      <Modal
+        isOpen={!!selectedPC}
+        onClose={handleCloseModal}
+        zIndex={100}
+      >
         {selectedPC && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            onClick={() => setSelectedPC(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-2xl p-5 max-w-sm w-full"
-            >
-              <h3 className="text-xl font-bold text-white mb-3">{selectedPC.name}</h3>
+          <>
+            <h3 className="text-xl font-bold text-white mb-3">{selectedPC.name}</h3>
+            
+            <div className="space-y-2.5 mb-4">
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Место</div>
+                <div className="text-white font-semibold">Ряд {selectedPC.position.row}, Место {selectedPC.position.col}</div>
+              </div>
               
-              <div className="space-y-2.5 mb-4">
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Место</div>
-                  <div className="text-white font-semibold">Ряд {selectedPC.position.row}, Место {selectedPC.position.col}</div>
-                </div>
-                
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Статус</div>
-                  <div className="text-white font-semibold">{getPCStatusLabel(selectedPC.status)}</div>
-                  {getPCFreeTime(selectedPC) && (
-                    <div className="text-xs text-emerald-400 mt-1">
-                      Освободится через: {getPCFreeTime(selectedPC)}
-                    </div>
-                  )}
-                </div>
-                
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Характеристики</div>
-                  <div className="space-y-0.5 text-xs text-white">
-                    <div>CPU: {selectedPC.specs.cpu}</div>
-                    <div>GPU: {selectedPC.specs.gpu}</div>
-                    <div>RAM: {selectedPC.specs.ram}</div>
-                    <div>Монитор: {selectedPC.specs.monitor}</div>
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Статус</div>
+                <div className="text-white font-semibold">{getPCStatusLabel(selectedPC.status)}</div>
+                {getPCFreeTime(selectedPC) && (
+                  <div className="text-xs text-emerald-400 mt-1">
+                    Освободится через: {getPCFreeTime(selectedPC)}
                   </div>
-                </div>
-                
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Цена</div>
-                  <div className="text-emerald-400 font-bold">{selectedPC.pricePerHour}₽/час</div>
+                )}
+              </div>
+              
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Характеристики</div>
+                <div className="space-y-0.5 text-xs text-white">
+                  <div>CPU: {selectedPC.specs.cpu}</div>
+                  <div>GPU: {selectedPC.specs.gpu}</div>
+                  <div>RAM: {selectedPC.specs.ram}</div>
+                  <div>Монитор: {selectedPC.specs.monitor}</div>
                 </div>
               </div>
-
-              {selectedPC.status === 'available' && (
-                <button
-                  onClick={() => {
-                    navigate(`/booking/${selectedPC.id}`)
-                    setSelectedPC(null)
-                  }}
-                  className="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-xl shadow-lg shadow-emerald-500/30 mb-2"
-                >
-                  Забронировать
-                </button>
-              )}
               
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Цена</div>
+                <div className="text-emerald-400 font-bold">{selectedPC.pricePerHour}₽/час</div>
+              </div>
+            </div>
+
+            {selectedPC.status === 'available' && (
               <button
-                onClick={() => setSelectedPC(null)}
-                className="w-full glass-card py-2.5 rounded-xl text-white font-medium text-sm"
+                onClick={() => {
+                  navigate(`/booking/${selectedPC.id}`)
+                  handleCloseModal()
+                }}
+                className="w-full bg-emerald-500 text-white font-bold py-2.5 rounded-xl shadow-lg shadow-emerald-500/30 mb-2"
               >
-                Закрыть
+                Забронировать
               </button>
-            </motion.div>
-          </motion.div>
+            )}
+            
+            <button
+              onClick={handleCloseModal}
+              className="w-full glass-card py-2.5 rounded-xl text-white font-medium text-sm"
+            >
+              Закрыть
+            </button>
+          </>
         )}
-      </AnimatePresence>
+      </Modal>
     </div>
   )
 })

@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import useStore from '../store/useStore'
@@ -9,26 +9,26 @@ const Profile = memo(() => {
   const [cancelMessage, setCancelMessage] = useState(null)
   const [activeTab, setActiveTab] = useState('bookings') // 'bookings' или 'purchases'
 
-  const activeBookings = bookings.filter(b => {
+  const activeBookings = useMemo(() => bookings.filter(b => {
     const bookingDate = new Date(b.date)
     return bookingDate > new Date() && !b.completed
-  }).sort((a, b) => new Date(a.date) - new Date(b.date))
+  }).sort((a, b) => new Date(a.date) - new Date(b.date)), [bookings])
 
-  const pastBookings = bookings.filter(b => {
+  const pastBookings = useMemo(() => bookings.filter(b => {
     const bookingDate = new Date(b.date)
     return bookingDate <= new Date() || b.completed
-  })
+  }), [bookings])
 
-  const totalSpent = bookings.filter(b => !b.completed || new Date(b.date) <= new Date()).reduce((sum, b) => sum + b.price, 0)
-  const totalHours = user.totalHours || pastBookings.reduce((sum, b) => sum + (b.completed ? b.duration : 0), 0)
+  const totalSpent = useMemo(() => bookings.filter(b => !b.completed || new Date(b.date) <= new Date()).reduce((sum, b) => sum + b.price, 0), [bookings])
+  const totalHours = useMemo(() => user.totalHours || pastBookings.reduce((sum, b) => sum + (b.completed ? b.duration : 0), 0), [user.totalHours, pastBookings])
 
-  const handleCancelBooking = (bookingId) => {
+  const handleCancelBooking = useCallback((bookingId) => {
     const result = cancelBooking(bookingId)
     if (result) {
       setCancelMessage(result)
       setTimeout(() => setCancelMessage(null), 3000)
     }
-  }
+  }, [cancelBooking])
 
   // Вычисляем время до начала бронирования
   const getTimeUntilBooking = (bookingDate) => {

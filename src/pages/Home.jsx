@@ -1,7 +1,8 @@
-import { memo, useState, useMemo, useEffect } from 'react'
+import { memo, useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import useStore from '../store/useStore'
+import Modal from '../components/Modal'
 
 const Home = memo(() => {
   const navigate = useNavigate()
@@ -168,7 +169,7 @@ const Home = memo(() => {
     }
   }
 
-  const handlePCClick = (pc) => {
+  const handlePCClick = useCallback((pc) => {
     if (pc.status === 'available') {
       setSelectedPC(pc)
       setShowBookingModal(true)
@@ -177,9 +178,9 @@ const Home = memo(() => {
     } else {
       setSelectedPC(pc)
     }
-  }
+  }, [])
 
-  const handleConfirmBooking = () => {
+  const handleConfirmBooking = useCallback(() => {
     if (!selectedPC || !selectedTime) return
 
     const slot = timeSlots.find(s => s.time === selectedTime)
@@ -204,7 +205,16 @@ const Home = memo(() => {
       setShowBookingModal(false)
       setSelectedPC(null)
     }
-  }
+  }, [selectedPC, selectedTime, selectedDuration, timeSlots, user.balance, addBooking, updatePCStatus, updateBalance])
+
+  const handleCloseBookingModal = useCallback(() => {
+    setShowBookingModal(false)
+    setSelectedPC(null)
+  }, [])
+
+  const handleCloseDetailsModal = useCallback(() => {
+    setSelectedPC(null)
+  }, [])
 
   // Вычисляем время освобождения для ПК
   const getPCFreeTime = (pc) => {
@@ -251,17 +261,20 @@ const Home = memo(() => {
   }
 
   // Группируем ПК по рядам (показываем первые 3 ряда на главной)
-  const rows = Array.from({ length: 3 }, (_, i) => i + 1)
-  const safePCs = Array.isArray(pcs) ? pcs : []
+  const rows = useMemo(() => Array.from({ length: 3 }, (_, i) => i + 1), [])
+  const safePCs = useMemo(() => Array.isArray(pcs) ? pcs : [], [pcs])
+  
   // Фильтруем ПК по рядам и сортируем по колонкам
-  const pcsByRow = rows.map(row => {
-    const rowPCs = safePCs.filter(pc => {
-      if (!pc || !pc.position) return false
-      return pc.position.row === row
+  const pcsByRow = useMemo(() => {
+    return rows.map(row => {
+      const rowPCs = safePCs.filter(pc => {
+        if (!pc || !pc.position) return false
+        return pc.position.row === row
+      })
+      // Сортируем по колонкам для правильного отображения
+      return rowPCs.sort((a, b) => (a.position?.col || 0) - (b.position?.col || 0))
     })
-    // Сортируем по колонкам для правильного отображения
-    return rowPCs.sort((a, b) => (a.position?.col || 0) - (b.position?.col || 0))
-  })
+  }, [rows, safePCs])
 
   const totalPrice = selectedPC ? selectedPC.pricePerHour * selectedDuration : 0
   const canBook = selectedPC && selectedTime && user.balance >= totalPrice && getTimeSlotAvailability[selectedTime]
@@ -391,199 +404,173 @@ const Home = memo(() => {
       </div>
 
       {/* Booking Modal */}
-      <AnimatePresence>
-        {showBookingModal && selectedPC && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-            onClick={() => {
-              setShowBookingModal(false)
-              setSelectedPC(null)
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-3xl p-6 max-w-sm w-full mx-4"
-            >
-              <h3 className="text-xl font-bold text-white mb-4">{selectedPC.name}</h3>
-              
-              {/* Day Fully Booked Warning */}
-              {isDayFullyBooked && (
-                <div className="mb-4 p-3 rounded-xl bg-orange-500/20 border border-orange-500/30">
-                  <div className="text-sm text-orange-400 font-medium mb-1">
-                    Весь день забронирован
-                  </div>
-                  {nextAvailableTime && (
-                    <div className="text-xs text-gray-300">
-                      Следующее свободное время через: {nextAvailableTime}
-                    </div>
-                  )}
+      <Modal
+        isOpen={showBookingModal && !!selectedPC}
+        onClose={handleCloseBookingModal}
+        zIndex={100}
+      >
+        {selectedPC && (
+          <>
+            <h3 className="text-xl font-bold text-white mb-4">{selectedPC.name}</h3>
+            
+            {/* Day Fully Booked Warning */}
+            {isDayFullyBooked && (
+              <div className="mb-4 p-3 rounded-xl bg-orange-500/20 border border-orange-500/30">
+                <div className="text-sm text-orange-400 font-medium mb-1">
+                  Весь день забронирован
                 </div>
-              )}
+                {nextAvailableTime && (
+                  <div className="text-xs text-gray-300">
+                    Следующее свободное время через: {nextAvailableTime}
+                  </div>
+                )}
+              </div>
+            )}
 
-              {/* Next Available Time Info */}
-              {!isDayFullyBooked && nextAvailableTime && !selectedTime && (
-                <div className="mb-4 p-3 rounded-xl bg-blue-500/20 border border-blue-500/30">
-                  <div className="text-xs text-blue-400">
-                    Ближайшее свободное время через: {nextAvailableTime}
-                  </div>
+            {/* Next Available Time Info */}
+            {!isDayFullyBooked && nextAvailableTime && !selectedTime && (
+              <div className="mb-4 p-3 rounded-xl bg-blue-500/20 border border-blue-500/30">
+                <div className="text-xs text-blue-400">
+                  Ближайшее свободное время через: {nextAvailableTime}
                 </div>
-              )}
-              
-              {/* Duration Selection */}
-              <div className="mb-4">
-                <div className="text-xs text-gray-400 mb-2">Длительность</div>
-                <div className="grid grid-cols-3 gap-2">
-                  {durations.map((d) => (
+              </div>
+            )}
+            
+            {/* Duration Selection */}
+            <div className="mb-4">
+              <div className="text-xs text-gray-400 mb-2">Длительность</div>
+              <div className="grid grid-cols-3 gap-2">
+                {durations.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setSelectedDuration(d)}
+                    className={`py-2 rounded-xl text-sm font-medium transition-all ${
+                      selectedDuration === d
+                        ? 'bg-emerald-500/30 text-emerald-400 border border-emerald-500/50'
+                        : 'glass-card text-gray-300'
+                    }`}
+                  >
+                    {d}ч
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Selection */}
+            <div className="mb-4">
+              <div className="text-xs text-gray-400 mb-2">Время начала</div>
+              <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
+                {timeSlots.map((slot) => {
+                  const isAvailable = getTimeSlotAvailability[slot.time]
+                  const isSelected = selectedTime === slot.time
+                  
+                  return (
                     <button
-                      key={d}
-                      onClick={() => setSelectedDuration(d)}
-                      className={`py-2 rounded-xl text-sm font-medium transition-all ${
-                        selectedDuration === d
+                      key={`${slot.date}-${slot.time}`}
+                      onClick={() => isAvailable && setSelectedTime(slot.time)}
+                      disabled={!isAvailable}
+                      className={`py-1.5 rounded-xl text-xs font-medium transition-all ${
+                        isSelected
                           ? 'bg-emerald-500/30 text-emerald-400 border border-emerald-500/50'
-                          : 'glass-card text-gray-300'
+                          : isAvailable
+                          ? 'glass-card text-gray-300'
+                          : 'bg-gray-800/30 text-gray-500 cursor-not-allowed opacity-50'
                       }`}
                     >
-                      {d}ч
+                      {slot.time}
                     </button>
-                  ))}
-                </div>
+                  )
+                })}
               </div>
+            </div>
 
-              {/* Time Selection */}
-              <div className="mb-4">
-                <div className="text-xs text-gray-400 mb-2">Время начала</div>
-                <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto">
-                  {timeSlots.map((slot) => {
-                    const isAvailable = getTimeSlotAvailability[slot.time]
-                    const isSelected = selectedTime === slot.time
-                    
-                    return (
-                      <button
-                        key={`${slot.date}-${slot.time}`}
-                        onClick={() => isAvailable && setSelectedTime(slot.time)}
-                        disabled={!isAvailable}
-                        className={`py-1.5 rounded-xl text-xs font-medium transition-all ${
-                          isSelected
-                            ? 'bg-emerald-500/30 text-emerald-400 border border-emerald-500/50'
-                            : isAvailable
-                            ? 'glass-card text-gray-300'
-                            : 'bg-gray-800/30 text-gray-500 cursor-not-allowed opacity-50'
-                        }`}
-                      >
-                        {slot.time}
-                      </button>
-                    )
-                  })}
-                </div>
+            {/* Price Summary */}
+            <div className="glass-card rounded-xl p-3 mb-4 space-y-1">
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Цена за час:</span>
+                <span>{selectedPC.pricePerHour}₽</span>
               </div>
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Длительность:</span>
+                <span>{selectedDuration}ч</span>
+              </div>
+              <div className="border-t border-white/10 pt-2 flex justify-between">
+                <span className="text-white font-semibold text-sm">Итого:</span>
+                <span className="text-emerald-400 font-bold">{totalPrice}₽</span>
+              </div>
+              <div className="flex justify-between text-xs text-gray-400">
+                <span>Баланс:</span>
+                <span className={user.balance >= totalPrice ? 'text-emerald-400' : 'text-red-400'}>
+                  {user.balance}₽
+                </span>
+              </div>
+            </div>
 
-              {/* Price Summary */}
-              <div className="glass-card rounded-xl p-3 mb-4 space-y-1">
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>Цена за час:</span>
-                  <span>{selectedPC.pricePerHour}₽</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>Длительность:</span>
-                  <span>{selectedDuration}ч</span>
-                </div>
-                <div className="border-t border-white/10 pt-2 flex justify-between">
-                  <span className="text-white font-semibold text-sm">Итого:</span>
-                  <span className="text-emerald-400 font-bold">{totalPrice}₽</span>
-                </div>
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>Баланс:</span>
-                  <span className={user.balance >= totalPrice ? 'text-emerald-400' : 'text-red-400'}>
-                    {user.balance}₽
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setShowBookingModal(false)
-                    setSelectedPC(null)
-                  }}
-                  className="flex-1 glass-card py-2.5 rounded-xl text-white font-medium text-sm"
-                >
-                  Отмена
-                </button>
-                <button
-                  onClick={handleConfirmBooking}
-                  disabled={!canBook}
-                  className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                    canBook
-                      ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                      : 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  Забронировать
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleCloseBookingModal}
+                className="flex-1 glass-card py-2.5 rounded-xl text-white font-medium text-sm"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleConfirmBooking}
+                disabled={!canBook}
+                className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                  canBook
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                Забронировать
+              </button>
+            </div>
+          </>
         )}
-      </AnimatePresence>
+      </Modal>
 
       {/* PC Details Modal (for occupied/booked PCs) */}
-      <AnimatePresence>
-        {selectedPC && !showBookingModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-            onClick={() => setSelectedPC(null)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="glass-card rounded-3xl p-6 max-w-sm w-full mx-4"
-            >
-              <h3 className="text-xl font-bold text-white mb-4">{selectedPC.name}</h3>
+      <Modal
+        isOpen={!!selectedPC && !showBookingModal}
+        onClose={handleCloseDetailsModal}
+        zIndex={100}
+      >
+        {selectedPC && (
+          <>
+            <h3 className="text-xl font-bold text-white mb-4">{selectedPC.name}</h3>
+            
+            <div className="space-y-3 mb-4">
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Статус</div>
+                <div className="text-white font-semibold">{getPCStatusLabel(selectedPC.status)}</div>
+              </div>
               
-              <div className="space-y-3 mb-4">
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Статус</div>
-                  <div className="text-white font-semibold">{getPCStatusLabel(selectedPC.status)}</div>
-                </div>
-                
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Характеристики</div>
-                  <div className="space-y-1 text-sm text-white">
-                    <div>CPU: {selectedPC.specs.cpu}</div>
-                    <div>GPU: {selectedPC.specs.gpu}</div>
-                    <div>RAM: {selectedPC.specs.ram}</div>
-                    <div>Монитор: {selectedPC.specs.monitor}</div>
-                  </div>
-                </div>
-                
-                <div>
-                  <div className="text-xs text-gray-400 mb-1">Цена</div>
-                  <div className="text-emerald-400 font-bold">{selectedPC.pricePerHour}₽/час</div>
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Характеристики</div>
+                <div className="space-y-1 text-sm text-white">
+                  <div>CPU: {selectedPC.specs.cpu}</div>
+                  <div>GPU: {selectedPC.specs.gpu}</div>
+                  <div>RAM: {selectedPC.specs.ram}</div>
+                  <div>Монитор: {selectedPC.specs.monitor}</div>
                 </div>
               </div>
+              
+              <div>
+                <div className="text-xs text-gray-400 mb-1">Цена</div>
+                <div className="text-emerald-400 font-bold">{selectedPC.pricePerHour}₽/час</div>
+              </div>
+            </div>
 
-              <button
-                onClick={() => setSelectedPC(null)}
-                className="w-full glass-card py-2.5 rounded-xl text-white font-medium text-sm"
-              >
-                Закрыть
-              </button>
-            </motion.div>
-          </motion.div>
+            <button
+              onClick={handleCloseDetailsModal}
+              className="w-full glass-card py-2.5 rounded-xl text-white font-medium text-sm"
+            >
+              Закрыть
+            </button>
+          </>
         )}
-      </AnimatePresence>
+      </Modal>
     </div>
   )
 })
